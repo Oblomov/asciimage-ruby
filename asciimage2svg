@@ -1,0 +1,73 @@
+#!/usr/bin/ruby
+
+begin
+	require 'asciimage'
+rescue LoadError
+	$:.unshift File.dirname(__FILE__)
+	require 'asciimage'
+end
+
+class ASCIImage
+	# SVG header, to be interpolated with the width and height of the image
+	SVGHEAD = "<svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' viewBox='0 0 %u %u'>"
+	SVGSTYLE = "<style>*{fill:black;stroke:black;stroke-width:10}</style>"
+	SVGFOOT = "</svg>"
+
+	SVGLINE = "<line id='%s' x1='%u' y1='%u' x2='%u' y2='%u'/>"
+	SVGGON = "<polygon id='%s' points='%s'/>"
+	SVGELLIPSE = "<ellipse id='%s' cx='%u' cy='%u' rx='%u' ry='%u'/>"
+
+	# convert a row, col coord into SVG coordinates
+	def svg_coord(row, col)
+		[col*10 + 5, row*10 + 5]
+	end
+
+	# convert an element into an SVG element
+	def svg_element(index, type, list)
+		id = "element#{index}"
+		coords = list.map { |pair| svg_coord(*pair) }
+		svgel = case type
+		when :point
+			point = coords.first
+			# work around a bug in a lot of rendering engines, that
+			# prevents zero-length paths from being displayed
+			fakepoint1 = [point.first-0.01, point.last]
+			fakepoint2 = [point.first+0.01, point.last]
+			SVGLINE % [id, *fakepoint1, *fakepoint2]
+		when :line
+			SVGLINE % [id, *coords.flatten]
+		when :path
+			nodes = coords.map { |pair| pair.join(',') }
+			SVGGON % [id, nodes.join(' ')]
+		when :ellipse
+			xmin, xmax = coords.map { |pair| pair.first }.minmax
+			ymin, ymax = coords.map { |pair| pair.last }.minmax
+			center = [(xmin + xmax)/2, (ymin + ymax)/2]
+			rx = (xmax - xmin)/2
+			ry = (ymax - ymin)/2
+			SVGELLIPSE % [id, *center, rx, ry]
+		else
+			raise NotImplementedError, type.to_s
+		end
+
+		return svgel
+	end
+
+	# output an SVG of the image
+	def to_svg
+		svg = []
+		svg << SVGHEAD % [@rows*10, @cols*10]
+		svg << SVGSTYLE
+		@els.each_with_index do |el, i|
+			svg << svg_element(i, el.first, el.last)
+		end
+		svg << SVGFOOT
+
+		return svg.join("\n")
+	end
+end
+
+if $0 == __FILE__
+	source = ARGV.size > 0 ? File.readlines(ARGV[0]) : STDIN.readlines
+	puts ASCIImage.parse(source).to_svg
+end

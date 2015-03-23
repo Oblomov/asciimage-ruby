@@ -4,7 +4,7 @@
 
 class ASCIImage
 
-	MARKS = ['1'..'9', 'A'..'Z', 'a'..'z'].map { |r| r.to_a }.flatten
+	MARKS = ['1'..'9', 'A'..'Z', 'a'..'n', 'p'..'z'].map { |r| r.to_a }.flatten
 
 	# rows, columns and elements
 	attr :rows, :cols, :els

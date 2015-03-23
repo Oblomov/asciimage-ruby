@@ -20,8 +20,10 @@ The principles of an ASCIImage are the following:
 
 * all whitespace is ignored, but pixels should be equally spaced;
 
-* pixels can be marked or unmarked; marks are numbered according to the system
-  1, 2, …, 9, A, B, …, Z, a, b, … z; anything else is an unmarked pixel;
+* pixels can be marked or unmarked; marks are numbered according to the
+  system 1, 2, …, 9, A, B, …, Z, a, b, …, n, p, …, z i.e. all digits,
+  uppercase and lowercase letters, with the exception of 0 (zero) and o
+  (lowercase letter o); anything else is an unmarked pixel;
 
 * a path is defined by consecutive marks (no gaps), or repeated/isolated
   marks:

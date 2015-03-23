@@ -5,10 +5,11 @@ that uses the parser to convert ASCIImages to SVG.
 
 ## ASCIImage
 
-The ASCIImage format has been [developed][airef] as an alternative, simple
+The [ASCIImage][website] format has been [developed][airef] as an alternative, simple
 way to create small icons on iOS and OS X using NSStrings. The original code
 can be found [here][].
 
+[website]: http:/asciimage.org/
 [airef]: http://cocoamine.net/blog/2015/03/20/replacing-photoshop-with-nsstring/
 [here]: https://github.com/cparnot/ASCIImage
 

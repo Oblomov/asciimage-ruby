@@ -7,10 +7,12 @@ rescue LoadError
 	require 'asciimage'
 end
 
+require 'optparse'
+
 class ASCIImage
 	# SVG header, to be interpolated with the width and height of the image
 	SVGHEAD = "<svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' viewBox='0 0 %u %u'>"
-	SVGSTYLE = "<style>*{fill:black;stroke:black;stroke-width:10}</style>"
+	SVGSTYLE = "<style>*{fill:%s;stroke:%s;stroke-width:%u}%s</style>"
 	SVGFOOT = "</svg>"
 
 	SVGLINE = "<line id='%s' x1='%u' y1='%u' x2='%u' y2='%u'/>"
@@ -54,10 +56,42 @@ class ASCIImage
 	end
 
 	# output an SVG of the image
-	def to_svg
+	def to_svg(options={})
 		svg = []
 		svg << SVGHEAD % [@rows*10, @cols*10]
-		svg << SVGSTYLE
+
+		# set the default fill/stroke color
+		fill = options[:color] or 'black'
+		stroke = options[:color] or 'black'
+		stroke = 'black' if stroke == 'none'
+
+		over = options[:override]
+		extra = []
+		if over
+			raise "override must be callable" unless over.respond_to? :call
+			# the override gets an index in input, and should return one of
+			# * nil (to not override)
+			# * a string without spaces, colons or semi-colons, which is assumed to be a color
+			# * anything else which is assumed to be the body of a CSS spec
+			@els.each_index do |i|
+				ret = over.call i
+				next if ret.nil?
+				if /[ :;]/.match ret
+					extra << "\#element#{i}{#{ret}}"
+					next
+				end
+				# assume color
+				elfill = ret
+				elstroke = ret
+				elstroke = stroke if elstroke == 'none'
+				extra << "\#element#{i}{fill:#{elfill};stroke:#{elstroke}}"
+			end
+		end
+
+
+
+		svg << SVGSTYLE % [fill, stroke, options[:width], extra.join]
+
 		@els.each_with_index do |el, i|
 			svg << svg_element(i, el.first, el.last)
 		end
@@ -68,6 +102,27 @@ class ASCIImage
 end
 
 if $0 == __FILE__
+	options = { :color => 'black', :width=>1, :override => [] }
+	OptionParser.new do |opts|
+		opts.on('--color COLOR', 'set default color') do |c|
+			options[:color] = c
+		end
+		opts.on('--width INTEGER', Integer, 'set default line width') do |w|
+			options[:width] = w
+		end
+		opts.on('--override PROC', 'routine to override properties of individual elements (implicit argument: index)') do |p|
+			options[:override] << p
+		end
+	end.parse!
+
+	if options[:override].empty?
+		options.delete :override
+	else
+		over = eval options[:override].unshift("Proc.new do |index|").push("end").join("\n")
+		options[:override] = over
+	end
+	options[:width] *= 10;
+
 	source = ARGV.size > 0 ? File.readlines(ARGV[0]) : STDIN.readlines
-	puts ASCIImage.parse(source).to_svg
+	puts ASCIImage.parse(source).to_svg(options)
 end

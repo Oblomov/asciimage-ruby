@@ -12,11 +12,18 @@ require 'optparse'
 class ASCIImage
 	# SVG header, to be interpolated with the width and height of the image
 	SVGHEAD = "<svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' viewBox='0 0 %u %u'>"
-	SVGSTYLE = "<style>*{fill:%s;stroke:%s;stroke-width:%u}%s</style>"
+	SVGSTYLE = <<EOS
+<style>
+ellipse,polygon{fill:%s;stroke:%s;stroke-width:%u}
+line,polyline{stroke:%s;stroke-width:%u}
+%s
+</style>
+EOS
 	SVGFOOT = "</svg>"
 
 	SVGLINE = "<line id='%s' x1='%u' y1='%u' x2='%u' y2='%u'/>"
 	SVGGON = "<polygon id='%s' points='%s'/>"
+	SVGPL = "<polyline id='%s' points='%s'/>"
 	SVGELLIPSE = "<ellipse id='%s' cx='%u' cy='%u' rx='%u' ry='%u'/>"
 
 	# convert a row, col coord into SVG coordinates
@@ -26,7 +33,7 @@ class ASCIImage
 
 	# convert an element into an SVG element
 	def svg_element(index, type, list)
-		id = "element#{index}"
+		id = "e#{index}"
 		coords = list.map { |pair| svg_coord(*pair) }
 		svgel = case type
 		when :point
@@ -40,7 +47,13 @@ class ASCIImage
 			SVGLINE % [id, *coords.flatten]
 		when :path
 			nodes = coords.map { |pair| pair.join(',') }
-			SVGGON % [id, nodes.join(' ')]
+			if path_open? index
+				# unclosed polyline
+				SVGPL % [id, nodes.join(' ')]
+			else
+				# polygon
+				SVGGON % [id, nodes.join(' ')]
+			end
 		when :ellipse
 			xmin, xmax = coords.map { |pair| pair.first }.minmax
 			ymin, ymax = coords.map { |pair| pair.last }.minmax
@@ -56,41 +69,50 @@ class ASCIImage
 	end
 
 	# output an SVG of the image
-	def to_svg(options={})
+	def to_svg
 		svg = []
 		svg << SVGHEAD % [@rows*10, @cols*10]
 
-		# set the default fill/stroke color
-		fill = options[:color] or 'black'
-		stroke = options[:color] or 'black'
-		stroke = 'black' if stroke == 'none'
-
-		over = options[:override]
+		# create the CSS elements from the overrides
 		extra = []
-		if over
-			raise "override must be callable" unless over.respond_to? :call
-			# the override gets an index in input, and should return one of
-			# * nil (to not override)
-			# * a string without spaces, colons or semi-colons, which is assumed to be a color
-			# * anything else which is assumed to be the body of a CSS spec
-			@els.each_index do |i|
-				ret = over.call i
-				next if ret.nil?
-				if /[ :;]/.match ret
-					extra << "\#element#{i}{#{ret}}"
-					next
-				end
-				# assume color
-				elfill = ret
-				elstroke = ret
-				elstroke = stroke if elstroke == 'none'
-				extra << "\#element#{i}{fill:#{elfill};stroke:#{elstroke}}"
+		@overrides.each do |index, over|
+			props = []
+			type = @els[index].first
+			if type == :ellipse or (type == :path and not path_open? index)
+				# closed paths have the same color for fill and stroke,
+				# unless 'fill' is none, in which case the stroke
+				# should be specified (but we don't warn if not)
+				# If the stroke is specified, it always takes precedence
+
+				stroke = over['stroke'] if over.key? 'stroke'
+				fill = over['fill'] if over.key? 'fill'
+
+				stroke ||= fill if fill != 'none'
+
+				props << "fill:#{fill}" if fill
+				props << "stroke:#{stroke}" if stroke
+			else
+				# open paths only have stroke
+				props << "stroke:#{over['stroke']}" if over.key? 'stroke'
 			end
+			props << "stroke-width:#{over['stroke-width']*10}" if over.key? 'stroke-width'
+
+			extra << "#e#{index}{#{props.join(';')}}"
 		end
 
+		# set the default fill/stroke color
+		fill = meta['fill'] or 'black'
+		stroke = meta['stroke'] or 'black'
+		width = meta['stroke-width']*10
 
-
-		svg << SVGSTYLE % [fill, stroke, options[:width], extra.join]
+		svg << SVGSTYLE % [
+			# closed paths have the same color for fill and stroke,
+			# unless fill is 'none', in which case stroke is used
+			fill, (fill == 'none' ? stroke : fill), width,
+			# open paths have no fill
+			stroke, width,
+			# overrides:
+			extra.join]
 
 		@els.each_with_index do |el, i|
 			svg << svg_element(i, el.first, el.last)
@@ -102,27 +124,6 @@ class ASCIImage
 end
 
 if $0 == __FILE__
-	options = { :color => 'black', :width=>1, :override => [] }
-	OptionParser.new do |opts|
-		opts.on('--color COLOR', 'set default color') do |c|
-			options[:color] = c
-		end
-		opts.on('--width INTEGER', Integer, 'set default line width') do |w|
-			options[:width] = w
-		end
-		opts.on('--override PROC', 'routine to override properties of individual elements (implicit argument: index)') do |p|
-			options[:override] << p
-		end
-	end.parse!
-
-	if options[:override].empty?
-		options.delete :override
-	else
-		over = eval options[:override].unshift("Proc.new do |index|").push("end").join("\n")
-		options[:override] = over
-	end
-	options[:width] *= 10;
-
 	source = ARGV.size > 0 ? File.readlines(ARGV[0]) : STDIN.readlines
-	puts ASCIImage.parse(source).to_svg(options)
+	puts ASCIImage.parse(source).to_svg
 end

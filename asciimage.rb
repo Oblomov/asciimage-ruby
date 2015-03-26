@@ -29,6 +29,9 @@ class ASCIImage
 	# as well as things such as title, author or whatever
 	attr :meta
 
+	# parsed per-path overrides, for simplicity
+	attr :overrides
+
 	# convert the list of position into an element; multi is true
 	# if the list is generated from a single mark with multiple
 	# occurrences
@@ -36,6 +39,20 @@ class ASCIImage
 		el_class = list.length == 1 ? :point :
 			(!multi ? :path : (list.length == 2 ? :line : :ellipse))
 		return [el_class, list.dup]
+	end
+
+	# provide all element properties (default and overrides
+	def element_props(index)
+		if @overrides.has_key? index
+			return @meta.merge @overrides[index]
+		else
+			return @meta
+		end
+	end
+
+	# is a path open?
+	def path_open?(index)
+		return element_props(index)['open-path']
 	end
 
 	# create a rows by cols image with the given marks list;
@@ -47,6 +64,9 @@ class ASCIImage
 		@cols = cols
 		@els = [] # array of elements, to be created from the marks
 		@meta = OPTIONS.merge md
+
+		# TODO ranges
+		@overrides = @meta.select { |k, v| Numeric === k }
 
 		# list of consecutive marks
 		current_list = []

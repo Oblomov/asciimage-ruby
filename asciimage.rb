@@ -1,13 +1,31 @@
 #!/usr/bin/ruby
 
-# Ruby code to parse ASCIImage and optionally export them as SVG
+# Ruby code to parse an ASCIImage
 
 class ASCIImage
 
 	MARKS = ['1'..'9', 'A'..'Z', 'a'..'n', 'p'..'z'].map { |r| r.to_a }.flatten
 
-	# rows, columns and elements
+	OPTIONS = {
+		# default fill color for (closed) paths:
+		'fill' => 'black',
+		# default stroke color for paths:
+		'stroke' => 'black',
+		# default stroke width for paths, in pixels:
+		'stroke-width' => 1,
+		# should paths be open? (default: no, paths are closed automatically)
+		'open-path' => false,
+		# should paths be aliased? (default: no, use anti-aliasing)
+		'aliased' => false
+	}
+
+	# rows, columns, elements
 	attr :rows, :cols, :els
+
+	# metadata
+	# metadata includes global and per-path options,
+	# as well as things such as title, author or whatever
+	attr :meta
 
 	# convert the list of position into an element; multi is true
 	# if the list is generated from a single mark with multiple
@@ -18,12 +36,15 @@ class ASCIImage
 		return [el_class, list.dup]
 	end
 
-	# create a row by cols image with the given marks list
-	# marks is a map of marks to the pixel coordinates they appear in
-	def initialize(rows, cols, marks)
+	# create a rows by cols image with the given marks list;
+	# marks is a map of marks to the pixel coordinates they appear in;
+	# md is a set of options that may override the defaults
+	# (either globally or per-path) and other metadata
+	def initialize(rows, cols, marks, md)
 		@rows = rows
 		@cols = cols
 		@els = [] # array of elements, to be created from the marks
+		@meta = OPTIONS.merge md
 
 		# list of consecutive marks
 		current_list = []
@@ -61,8 +82,9 @@ class ASCIImage
 
 	end
 
-	# Parse an ASCIImage passed as an array of lines
-	def self.parse(lines)
+	# Parse an ASCIImage passed as an array of lines, with additional
+	# optional metadata
+	def self.parse(lines, metadata={})
 
 		# some sanity checks
 		raise "no Array given" unless Array === lines
@@ -92,9 +114,7 @@ class ASCIImage
 			end
 		end
 
-		return ASCIImage.new(rows, cols, marks)
-
+		return ASCIImage.new(rows, cols, marks, metadata)
 	end
-
 end
 

@@ -2,6 +2,8 @@
 
 # Ruby code to parse an ASCIImage
 
+require 'yaml'
+
 class ASCIImage
 
 	MARKS = ['1'..'9', 'A'..'Z', 'a'..'n', 'p'..'z'].map { |r| r.to_a }.flatten
@@ -84,10 +86,10 @@ class ASCIImage
 
 	# Parse an ASCIImage passed as an array of lines, with additional
 	# optional metadata
-	def self.parse(lines, metadata={})
+	def self.parse_raw(lines, metadata={})
 
 		# some sanity checks
-		raise "no Array given" unless Array === lines
+		raise ArgumentError, "no Array given" unless Array === lines
 		raise "empty Array given" unless lines.length > 0
 
 		# discard ending newlines
@@ -116,5 +118,88 @@ class ASCIImage
 
 		return ASCIImage.new(rows, cols, marks, metadata)
 	end
+
+	# Parse a YAML ASCIImage
+	#
+	# A YAML ASCIImage is a YAML document or sets of documents containing
+	# both metadata and an image. The image data itself is stored as
+	# the content of the 'image' key in the YAML document. If multiple
+	# YAML documents are present, they are assumed to be layers of the
+	# same image
+	#
+	# The method supports loading from either:
+	# * an array of Hashes (assumed created by a YAML.load_documents
+	#   or similar method);
+	# * an array of Strings (joined into a single string before
+	#   passing them to YAML.load_documents);
+	# * a String (which will get passed to YAML.load_documents).
+	#
+	# The `metadata` argument allows overrides of the original
+	# document metadata
+	def self.parse_yaml(source, metadata={})
+		case source
+		when Array
+			case source.first
+			when Hash
+				docs = source
+			when String
+				docs = YAML.load_documents(source.join)
+			else
+				raise ArgumentError, "can't handle #{source.first.class}"
+			end
+		when String
+			docs = YAML.load_documents(source)
+		when Hash
+			docs = [source]
+		else
+			raise ArgumentError, "can't handle #{source.class}"
+		end
+
+		raise "no YAML documents found" if docs.length < 1
+
+		# if there is a single document, then it's expected to have
+		# an 'image' key
+		if docs.length == 1
+			raise "no ASCIImage found" unless docs.first.has_key?('image')
+			# the key is there, return the parsed ASCIImage, passing the whole
+			# YAML document as options —yes, this means that the image source
+			# will be in the metadata, and that's intentional
+			return self.parse_raw(docs.first['image'].lines,
+					      docs.first.merge(metadata))
+		end
+
+		# multi-image is a TODO
+		raise NotImplementedError, "multi-image not supported yet"
+	end
+
+	# Parse an ASCIImage, autodetecting if it's in raw format or a (set of)
+	# YAML document(s)
+	def self.parse(source, metadata={})
+		# the source should be either an Array of Strings or Hashes, or a String,
+		# or a Hash
+		case source
+		when String
+			# try YAML first, raw second
+			return self.parse_yaml(source, metadata) rescue self.parse_raw(source, metadata)
+		when Hash
+			# assume YAML
+			return self.parse_yaml(source, metadata)
+		when Array
+			case source.first
+			when Hash
+				# Hashes? assume YAML
+				return self.parse_yaml(source, metadata)
+			when String
+				# try raw first, YAML second
+				return self.parse_raw(source, metadata) rescue self.parse_yaml(source, metadata)
+			else
+				raise ArgumentError, "can't handle #{source.first.class}"
+			end
+		else
+			raise ArgumentError, "can't handle #{source.class}"
+		end
+
+	end
+
 end
 
